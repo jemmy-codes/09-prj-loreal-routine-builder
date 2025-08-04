@@ -1,5 +1,7 @@
 /* Get references to DOM elements */
 const categoryFilter = document.getElementById("categoryFilter");
+const searchInput = document.getElementById("searchInput");
+const clearSearchBtn = document.getElementById("clearSearch");
 const productsContainer = document.getElementById("productsContainer");
 const selectedProductsList = document.getElementById("selectedProductsList");
 const generateRoutineBtn = document.getElementById("generateRoutine");
@@ -42,7 +44,7 @@ function saveSelectedProductsToStorage() {
 /* Show initial placeholder until user selects a category */
 productsContainer.innerHTML = `
   <div class="placeholder-message">
-    Select a category to view products
+    Select a category or search for products
   </div>
 `;
 
@@ -51,6 +53,80 @@ async function loadProducts() {
   const response = await fetch("products.json");
   const data = await response.json();
   return data.products;
+}
+
+/* Filter products based on category and search term */
+function filterProducts(products, category, searchTerm) {
+  let filteredProducts = products;
+
+  /* Filter by category if selected */
+  if (category) {
+    filteredProducts = filteredProducts.filter(
+      (product) => product.category === category
+    );
+  }
+
+  /* Filter by search term if provided */
+  if (searchTerm) {
+    const searchLower = searchTerm.toLowerCase();
+    filteredProducts = filteredProducts.filter((product) => {
+      return (
+        product.name.toLowerCase().includes(searchLower) ||
+        product.brand.toLowerCase().includes(searchLower) ||
+        product.description.toLowerCase().includes(searchLower)
+      );
+    });
+  }
+
+  return filteredProducts;
+}
+
+/* Update product display based on current filters */
+async function updateProductDisplay() {
+  const products = await loadProducts();
+  const selectedCategory = categoryFilter.value;
+  const searchTerm = searchInput.value.trim();
+
+  /* Show/hide clear search button */
+  if (searchTerm) {
+    clearSearchBtn.classList.add("visible");
+  } else {
+    clearSearchBtn.classList.remove("visible");
+  }
+
+  /* If no category selected and no search term, show placeholder */
+  if (!selectedCategory && !searchTerm) {
+    productsContainer.innerHTML = `
+      <div class="placeholder-message">
+        Select a category or search for products
+      </div>
+    `;
+    return;
+  }
+
+  const filteredProducts = filterProducts(
+    products,
+    selectedCategory,
+    searchTerm
+  );
+
+  /* Show "no results" message if no products match */
+  if (filteredProducts.length === 0) {
+    const message = searchTerm
+      ? `No products found matching "${searchTerm}"${
+          selectedCategory ? ` in ${selectedCategory} category` : ""
+        }`
+      : `No products found in ${selectedCategory} category`;
+
+    productsContainer.innerHTML = `
+      <div class="placeholder-message">
+        ${message}
+      </div>
+    `;
+    return;
+  }
+
+  displayProducts(filteredProducts);
 }
 
 /* Create HTML for displaying product cards */
@@ -115,16 +191,7 @@ function toggleDescription(productId) {
 
 /* Filter and display products when category changes */
 categoryFilter.addEventListener("change", async (e) => {
-  const products = await loadProducts();
-  const selectedCategory = e.target.value;
-
-  /* filter() creates a new array containing only products 
-     where the category matches what the user selected */
-  const filteredProducts = products.filter(
-    (product) => product.category === selectedCategory
-  );
-
-  displayProducts(filteredProducts);
+  await updateProductDisplay();
 });
 
 /* Toggle product selection when user clicks select/remove button */
@@ -151,13 +218,7 @@ async function toggleProductSelection(productId) {
   saveSelectedProductsToStorage();
 
   /* Re-display current products with updated selection state */
-  const selectedCategory = categoryFilter.value;
-  if (selectedCategory) {
-    const filteredProducts = products.filter(
-      (p) => p.category === selectedCategory
-    );
-    displayProducts(filteredProducts);
-  }
+  await updateProductDisplay();
 }
 
 /* Update the selected products display */
@@ -195,22 +256,14 @@ function clearConversationIfNeeded() {
 }
 
 /* Clear all selected products */
-function clearAllProducts() {
+async function clearAllProducts() {
   selectedProducts = [];
   updateSelectedProductsDisplay();
   saveSelectedProductsToStorage();
   clearConversationIfNeeded();
 
   /* Update any currently displayed products to remove selected state */
-  const selectedCategory = categoryFilter.value;
-  if (selectedCategory) {
-    loadProducts().then((products) => {
-      const filteredProducts = products.filter(
-        (p) => p.category === selectedCategory
-      );
-      displayProducts(filteredProducts);
-    });
-  }
+  await updateProductDisplay();
 }
 
 /* Generate routine using OpenAI API */
@@ -488,6 +541,17 @@ IMPORTANT FORMATTING RULES:
 /* Event listeners */
 generateRoutineBtn.addEventListener("click", generateRoutine);
 clearAllBtn.addEventListener("click", clearAllProducts);
+
+/* Search functionality event listeners */
+searchInput.addEventListener("input", async () => {
+  await updateProductDisplay();
+});
+
+clearSearchBtn.addEventListener("click", async () => {
+  searchInput.value = "";
+  clearSearchBtn.classList.remove("visible");
+  await updateProductDisplay();
+});
 
 /* Initialize the application */
 loadSelectedProductsFromStorage();
